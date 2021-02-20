@@ -6,6 +6,12 @@ const bcrypt = require('bcrypt');
 
 module.exports = {
     get: {
+        allUsers: (req, res, next) => {
+            models.User.find({})
+                .then((users) => res.send(users))
+                .catch((err) => res.status(500).send("Error"));
+        },
+
         userById: (req, res, next) => {
             const { id } = req.params;
 
@@ -16,6 +22,7 @@ module.exports = {
 
         resetPassword: (req, res, next) => {
             const { email } = req.body;
+            console.log(email);
 
             crypto.randomBytes(32, (err, buffer) => {
                 if (err) {
@@ -31,10 +38,11 @@ module.exports = {
                             res.send('no registered user')
                         }
                         user.resetToken = token;
-                        user.resetTokenTime = Date.now() + 360000;
+                        user.resetTokenTime = Date.now() + 3600000;
                         return user.save();
                     })
                     .then(result => {
+                        res.send("Password reset");
                         mail.sendMail({
                             to: email,
                             from: 'qkubu25@gmail.com',
@@ -45,7 +53,10 @@ module.exports = {
                             `
                         })
                     })
-                    .catch()
+                    .catch(err => {
+                        console.log(err);
+                        res.status(500).send("Error");
+                    })
             })
         },
     },
@@ -56,18 +67,11 @@ module.exports = {
 
             models.User.create({ email, password, site })
                 .then((createdUser) => {
-
-                    let userObj = {};
-
-                    userObj._id = createdUser._id;
-                    userObj.email = createdUser.email;
-                    userObj.site = createdUser.site;
-
-                    res.send(userObj);
+                    res.send(createdUser);
                 })
                 .catch((err) => {
                     console.log(err);
-                    next(err);
+                    res.status(500).send("Error")
                 })
         },
 
@@ -81,12 +85,8 @@ module.exports = {
                         res.status(401).send('Invalid password');
                         return;
                     }
-                    let userObj = {};
-                    userObj._id = user._id;
-                    userObj.email = user.email;
-                    userObj.site = user.site;
 
-                    res.send(userObj);
+                    res.send(user);
 
                     mail.sendMail({
                         to: email,
@@ -95,25 +95,28 @@ module.exports = {
                         html: '<h1>You successful login</h1>'
                     })
                 })
-                .catch(next);
+                .catch(err => {
+                    console.log(err);
+                    res.status(500).send("Error");
+                });
         },
 
         resetPassword: (req, res, next) => {
+            const { email } = req.body;
             const { newPassword } = req.body;
-            const { resetToken } = req.params;
+            const { token } = req.params;
 
-            models.User.findOne({ resetToken })
-                // .then(user => {
-                //     resetUser = user;
-                //     // return bcrypt.hash(newPassword, 10);
-                // })
-                .then(user => {
-                    console.log(user);
+            models.User.findOne({ email: email, resetToken: token, resetTokenTime: { $gt: Date.now() } })
+                .then((user) => {
                     user.password = newPassword
                     user.resetToken = undefined;
                     user.resetTokenTime = undefined;
-                    user.save();
-                    res.send('Successful reset password')
+                    console.log(user);
+                    return user.save();
+                })
+                .then((user) => {
+                    console.log(user);
+                    res.send('Successful reset password');
 
                     mail.sendMail({
                         to: user.email,
@@ -123,8 +126,8 @@ module.exports = {
                     })
                 })
                 .catch(err => {
-                    console.log(err)
-                    res.send(err)
+                    console.log(err);
+                    res.status(500).send("Error");
                 })
         },
 
@@ -133,12 +136,30 @@ module.exports = {
         }
     },
 
-    put: (req, res, next) => {
-        const id = req.params.id;
-        const { email, password } = req.body;
+    put: {
+        updateUser: (req, res, next) => {
+            const id = req.params.id;
+            const { email, password } = req.body;
 
-        models.User.update({ _id: id }, { email, password })
-            .then((updatedUser) => res.send(updatedUser))
-            .catch(next)
+            models.User.update({ _id: id }, { email, password })
+                .then((updatedUser) => res.send(updatedUser))
+                .catch(err => {
+                    console.log(err);
+                    res.status(500).send("Error");
+                })
+        },
     },
+
+    delete: {
+        deleteUser: (req, res, next) => {
+            const { id } = req.params;
+
+            models.User.findOneAndDelete({ _id: id })
+                .then((deletedUser) => res.send("You successful Delete"))
+                .catch(err => {
+                    console.log(err);
+                    res.status(500).send("Error");
+                })
+        },
+    }
 };
