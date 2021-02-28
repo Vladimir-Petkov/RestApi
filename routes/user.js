@@ -5,6 +5,8 @@ router.get('/', controllers.user.get.allUsers);
 
 router.post('/register', controllers.user.post.register);
 
+router.post('/verifyNumber', controllers.user.post.verifyNumber);
+
 router.post('/login', controllers.user.post.login);
 
 router.get('/reset', controllers.user.get.resetPassword);
