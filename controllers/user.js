@@ -1,8 +1,7 @@
 const models = require('../models');
 const config = require('../config/config');
+const utils = require('../utils');
 const mail = require('../utils/mail');
-const crypto = require('crypto');
-const bcrypt = require('bcrypt');
 
 module.exports = {
     get: {
@@ -63,22 +62,51 @@ module.exports = {
 
     post: {
         register: (req, res, next) => {
-            const { email, password, site } = req.body;
+            const { email, password } = req.body;
+            const number = Math.floor(100000 + Math.random() * 900000);
 
-            models.User.create({ email, password, site })
+            models.User.create({ email, password, emailNumberValidation: number })
                 .then((createdUser) => {
-                    res.send(createdUser);
+                    const token = utils.jwt.createToken({ id: createdUser._id });
+                    res.header("Authorization", token).send(createdUser);
+
+                    mail.sendMail({
+                        to: email,
+                        from: 'qkubu25@gmail.com',
+                        subject: 'Validation email',
+                        html: `
+                        <p>You registered in our website</p>
+                        <p>${number}</p>
+                        `
+                    })
                 })
                 .catch((err) => {
                     console.log(err);
-                    res.status(500).send("Error")
+                    res.status(500).send('Error');
+                })
+        },
+
+        verifyNumber: (req, res, next) => {
+            const { email, verifyNumber } = req.body;
+
+            models.User.findOne({ email: email, emailNumberValidation: verifyNumber })
+                .then((user) => {
+                    user.emailNumberValidation = undefined
+                    user.emailNumberValidationTime = undefined;
+                    return user.save();
+                })
+                .then(() => {
+                    res.send('True');
+                })
+                .catch((err) => {
+                    console.log(err);
+                    res.status(500).send('Error');
                 })
         },
 
         login: (req, res, next) => {
-            const { email, password } = req.body;
-
-            models.User.findOne({ email })
+            const { username, password } = req.body;
+            models.User.findOne({ username })
                 .then((user) => Promise.all([user, user.matchPassword(password)]))
                 .then(([user, match]) => {
                     if (!match) {
@@ -86,19 +114,10 @@ module.exports = {
                         return;
                     }
 
-                    res.send(user);
-
-                    mail.sendMail({
-                        to: email,
-                        from: 'qkubu25@gmail.com',
-                        subject: 'successful login',
-                        html: '<h1>You successful login</h1>'
-                    })
+                    const token = utils.jwt.createToken({ id: user._id });
+                    res.header("Authorization", token).send(user);
                 })
-                .catch(err => {
-                    console.log(err);
-                    res.status(500).send("Error");
-                });
+                .catch(next);
         },
 
         resetPassword: (req, res, next) => {
@@ -132,7 +151,12 @@ module.exports = {
         },
 
         logout: (req, res, next) => {
-            res.send('Logout successfully!');
+            const token = req.cookies[config.authCookieName];
+            models.TokenBlacklist.create({ token })
+                .then(() => {
+                    res.clearCookie(config.authCookieName).send('Logout successfully!');
+                })
+                .catch(next);
         }
     },
 

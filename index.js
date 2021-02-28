@@ -1,15 +1,11 @@
 const config = require('./config/config');
 const dbConnection = require('./config/database');
-const express = require('express');
 
-const app = express();
+const app = require('express')();
 
 dbConnection().then(() => {
-    
-    app.use(express.json())
-    app.use(express.urlencoded({
-        extended: true
-    }));
+
+    require('./config/express')(app);
 
     require('./config/routes')(app);
 
